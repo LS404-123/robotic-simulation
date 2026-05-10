@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雙足步行模擬 | 工程儀表板</title>
+    <style>
+        :root {
+            --bg-color: #05070a;
+            --card-bg: rgba(13, 17, 23, 0.7);
+            --surface: rgba(255, 255, 255, 0.03);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.1);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-glow: rgba(59, 130, 246, 0.5);
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-green: #10b981;
+            --radius-lg: 24px;
+            --radius-md: 12px;
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            background-image:
+                radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.08) 0%, transparent 50%);
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 1fr 450px;
+            grid-template-rows: 64px 1fr;
+            height: 100vh;
+            padding: 16px;
+            gap: 16px;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.5px;
+            color: #fff;
+        }
+
+        .logo span {
+            color: var(--primary);
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            background: rgba(59, 130, 246, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 24px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .dot.jammed {
+            background: var(--accent-red);
+            box-shadow: 0 0 10px var(--accent-red);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .viewport-container {
+            position: relative;
+            background: #2c2e33;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-xl);
+        }
+
+        #mechanism-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            padding-right: 4px;
+            max-height: 100%;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 10px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card-header {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .control-label {
+            font-size: 0.85rem;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .badge {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--primary);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            width: 100%;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 8px var(--primary-glow);
+            transition: all 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 12px var(--primary-glow);
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .crank-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .crank-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .crank-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .playback-card {
+            border-top: 2px solid var(--primary);
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            flex: 2;
+            background: var(--primary);
+            border: none;
+            color: #fff;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: transform 0.1s;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            flex: 1;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: var(--accent-red);
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary.paused {
+            background: #1d4ed8;
+        }
+
+        .base-line {
+            stroke: rgba(255, 255, 255, 0.15);
+            stroke-width: 2;
+        }
+
+        .red-line {
+            stroke: var(--accent-red);
+            stroke-width: 5;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
+        }
+
+        .orange-line {
+            stroke: var(--accent-orange);
+            stroke-width: 18;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.6));
+        }
+
+        .pivot {
+            fill: #fff;
+            stroke: #000;
+            stroke-width: 2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-shell">
+        <header>
+            <div class="logo">
+                雙足步行 <span>模擬系統</span>
+            </div>
+            <div class="status-indicators">
+                <div class="status-item">
+                    <div id="status-dot" class="dot"></div>
+                    <span id="status-text">系統運作中</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="viewport-container">
+            <svg viewBox="0 0 800 600" id="mechanism-svg">
+                <defs>
+                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+
+                <g id="master-rotation" transform="rotate(90, 400, 300)">
+                    <g id="world-group">
+                        <g id="bottom-holes"></g>
+                    </g>
+
+                    <line id="base-body-line" x1="-2000" y1="400" x2="2000" y2="400" class="base-line" />
+                    <line id="left-line" x1="350" y1="190" x2="350" y2="400" class="base-line" />
+                    <line id="right-line" x1="398" y1="331" x2="398" y2="400" class="base-line" />
+
+                    <path id="trajectory-path" fill="none" stroke="rgba(249, 115, 22, 0.4)" stroke-width="2"
+                        stroke-dasharray="4 4" />
+                    <circle id="point-leftmost" r="5" fill="#10b981" />
+                    <circle id="point-rightmost" r="5" fill="none" stroke="#3b82f6" stroke-width="2" />
+
+                    <g id="dimension-group">
+                        <line id="dimension-line" stroke="rgba(255, 255, 255, 0.4)" stroke-width="1.5"
+                            stroke-dasharray="3 3" />
+                        <line id="dimension-tick-left" stroke="rgba(255, 255, 255, 0.4)" stroke-width="1.5" />
+                        <line id="dimension-tick-right" stroke="rgba(255, 255, 255, 0.4)" stroke-width="1.5" />
+                        <rect id="dimension-bg" fill="var(--bg-color)" rx="4" />
+                        <text id="dimension-text" fill="var(--text-main)" font-size="13" font-family="monospace"
+                            font-weight="bold" text-anchor="middle" dominant-baseline="middle">0 mm</text>
+                    </g>
+
+                    <g id="mechanism">
+                        <line id="orange-lever-2" class="orange-line" />
+                        <line id="red-crank-2" class="red-line" />
+                        <line id="orange-lever" class="orange-line" />
+                        <line id="red-crank" class="red-line" />
+
+                        <circle id="pivot-left" r="5" class="pivot" />
+                        <circle id="pivot-right" r="5" class="pivot" />
+                        <circle id="pivot-moving-2" r="4" class="pivot" fill="var(--accent-red)" />
+                        <circle id="pivot-moving" r="4" class="pivot" fill="var(--accent-red)" />
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <aside class="sidebar">
+            <div class="card playback-card">
+                <div class="card-header">控制台</div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">手動角度控制</label>
+                        <span class="badge" id="angle-val">190°</span>
+                    </div>
+                    <input type="range" id="angle-slider" min="0" max="360" value="190" step="1">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">曲柄迴轉速</label>
+                        <span class="badge" id="speed-val">1.0x</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0.1" max="5" value="1" step="0.1">
+                </div>
+
+                <div class="action-row">
+                    <button id="play-pause-btn" class="btn-primary">暫停模擬</button>
+                    <button id="reset-btn" class="btn-secondary">重置系統</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">機構幾何配置</div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">左側固定高度 (h)</label>
+                        <span class="badge" id="height-val">35.0 mm</span>
+                    </div>
+                    <input type="range" id="height-slider" min="10" max="60" value="35" step="0.5">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">曲柄水平間距 (w)</label>
+                        <span class="badge" id="width-val">8.0 mm</span>
+                    </div>
+                    <input type="range" id="width-slider" min="0" max="40" value="8" step="0.5">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">搖桿延伸長度 (ext)</label>
+                        <span class="badge" id="extension-val">30.0 mm</span>
+                    </div>
+                    <input type="range" id="extension-slider" min="10" max="100" value="30" step="1">
+                </div>
+
+                <div class="control-item">
+                    <label class="control-label">主動曲柄長度</label>
+                    <div class="button-grid" id="crank-buttons">
+                        <div class="crank-btn" data-val="6.5">6.5mm</div>
+                        <div class="crank-btn" data-val="11">11mm</div>
+                        <div class="crank-btn active" data-val="15.5">15.5mm</div>
+                        <div class="crank-btn" data-val="20">20mm</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">環境與物理模擬</div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">地面相對高度</label>
+                        <span class="badge" id="ground-y-val">-3 mm</span>
+                    </div>
+                    <input type="range" id="ground-y-slider" min="-30" max="30" value="-3" step="1">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label class="control-label">重力滑落模擬</label>
+                            <button id="gravity-toggle-btn" class="badge"
+                                style="cursor:pointer; border:1px solid var(--accent-green); color:var(--accent-green); background:transparent;">開啟</button>
+                        </div>
+                        <span class="badge" id="gravity-val">1.0</span>
+                    </div>
+                    <input type="range" id="gravity-slider" min="0" max="5" value="1.0" step="0.1">
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // DOM Elements
+        const redCrank = document.getElementById('red-crank');
+        const orangeLever = document.getElementById('orange-lever');
+        const redCrank2 = document.getElementById('red-crank-2');
+        const orangeLever2 = document.getElementById('orange-lever-2');
+        const leftLine = document.getElementById('left-line');
+        const rightLine = document.getElementById('right-line');
+
+        const pivotLeft = document.getElementById('pivot-left');
+        const pivotRight = document.getElementById('pivot-right');
+        const pivotMoving = document.getElementById('pivot-moving');
+        const pivotMoving2 = document.getElementById('pivot-moving-2');
+
+        const trajectoryPath = document.getElementById('trajectory-path');
+        const pointLeftmost = document.getElementById('point-leftmost');
+        const pointRightmost = document.getElementById('point-rightmost');
+
+        const dimLine = document.getElementById('dimension-line');
+        const dimTickLeft = document.getElementById('dimension-tick-left');
+        const dimTickRight = document.getElementById('dimension-tick-right');
+        const dimBg = document.getElementById('dimension-bg');
+        const dimText = document.getElementById('dimension-text');
+
+        const worldGroup = document.getElementById('world-group');
+        const bottomHolesGroup = document.getElementById('bottom-holes');
+        const gridPattern = document.getElementById('grid');
+
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        let groundX = 0;
+
+        const heightSlider = document.getElementById('height-slider');
+        const widthSlider = document.getElementById('width-slider');
+        const extensionSlider = document.getElementById('extension-slider');
+        const groundYSlider = document.getElementById('ground-y-slider');
+        const gravitySlider = document.getElementById('gravity-slider');
+        const gravityToggleBtn = document.getElementById('gravity-toggle-btn');
+        const speedSlider = document.getElementById('speed-slider');
+        const angleSlider = document.getElementById('angle-slider');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        const heightVal = document.getElementById('height-val');
+        const widthVal = document.getElementById('width-val');
+        const extensionVal = document.getElementById('extension-val');
+        const groundYVal = document.getElementById('ground-y-val');
+        const angleVal = document.getElementById('angle-val');
+        const gravityVal = document.getElementById('gravity-val');
+        const speedVal = document.getElementById('speed-val');
+
+        let isPlaying = true;
+        const scale = 6;
+        const baseY = 400;
+        const leftX = 350;
+        const rightLineHeight = 11.5 * scale;
+
+        let redPivotX = 398;
+        let redPivotY = 331;
+        let orangePivotX = 350;
+        let orangePivotY = 190;
+
+        const crankButtons = document.querySelectorAll('#crank-buttons .crank-btn');
+        let currentCrankValue = 15.5;
+        let crankLength = 15.5 * scale;
+        let angle = -190 * Math.PI / 180;
+        const baseSpeed = 0.025;
+        let isGravityEnabled = true;
+
+        crankButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                crankButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentCrankValue = parseFloat(btn.dataset.val);
+                updateParameters();
+            });
+        });
+
+        function updateParameters() {
+            const h = parseFloat(heightSlider.value);
+            const w = parseFloat(widthSlider.value);
+            const ext = parseFloat(extensionSlider.value);
+            const c = currentCrankValue;
+
+            heightVal.textContent = h.toFixed(1) + ' mm';
+            widthVal.textContent = w.toFixed(1) + ' mm';
+            extensionVal.textContent = ext.toFixed(1) + ' mm';
+            crankLength = c * scale;
+
+            orangePivotY = baseY - (h * scale);
+            redPivotX = leftX + (w * scale);
+            redPivotY = baseY - rightLineHeight;
+
+            leftLine.setAttribute('y1', orangePivotY);
+            rightLine.setAttribute('x1', redPivotX);
+            rightLine.setAttribute('x2', redPivotX);
+            rightLine.setAttribute('y1', redPivotY);
+
+            pivotLeft.setAttribute('cy', orangePivotY);
+            pivotLeft.setAttribute('cx', orangePivotX);
+            pivotRight.setAttribute('cx', redPivotX);
+            pivotRight.setAttribute('cy', redPivotY);
+
+            let pathData = "";
+            let minX = Infinity, minX_Y = 0;
+            let maxX = -Infinity, maxX_Y = 0;
+            let maxY = -Infinity;
+            const steps = 180;
+            const extPx = ext * scale;
+
+            for (let i = 0; i <= steps; i++) {
+                let theta = (i / steps) * Math.PI * 2;
+                let cEndX = redPivotX + crankLength * Math.cos(theta);
+                let cEndY = redPivotY + crankLength * Math.sin(theta);
+                let dx = cEndX - orangePivotX;
+                let dy = cEndY - orangePivotY;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                let lEndX = cEndX + (dx / dist) * extPx;
+                let lEndY = cEndY + (dy / dist) * extPx;
+
+                if (i === 0) pathData += `M ${lEndX} ${lEndY} `;
+                else pathData += `L ${lEndX} ${lEndY} `;
+
+                if (lEndX < minX) { minX = lEndX; minX_Y = lEndY; }
+                if (lEndX > maxX) { maxX = lEndX; maxX_Y = lEndY; }
+                if (lEndY > maxY) { maxY = lEndY; }
+            }
+
+            trajectoryPath.setAttribute('d', pathData);
+            pointLeftmost.setAttribute('cx', minX);
+            pointLeftmost.setAttribute('cy', minX_Y);
+            pointRightmost.setAttribute('cx', maxX);
+            pointRightmost.setAttribute('cy', maxX_Y);
+
+            const horizontalDistMm = (maxX - minX) / scale;
+            const dimY = Math.min(maxY + 35, 580);
+            dimLine.setAttribute('x1', minX); dimLine.setAttribute('x2', maxX);
+            dimLine.setAttribute('y1', dimY); dimLine.setAttribute('y2', dimY);
+            dimTickLeft.setAttribute('x1', minX); dimTickLeft.setAttribute('x2', minX);
+            dimTickLeft.setAttribute('y1', minX_Y + 8); dimTickLeft.setAttribute('y2', dimY);
+            dimTickRight.setAttribute('x1', maxX); dimTickRight.setAttribute('x2', maxX);
+            dimTickRight.setAttribute('y1', maxX_Y + 8); dimTickRight.setAttribute('y2', dimY);
+
+            const midX = (minX + maxX) / 2;
+            dimText.textContent = horizontalDistMm.toFixed(1) + ' mm';
+            dimText.setAttribute('x', midX);
+            dimText.setAttribute('y', dimY);
+            dimBg.setAttribute('x', midX - 35); dimBg.setAttribute('y', dimY - 12);
+            dimBg.setAttribute('width', 70); dimBg.setAttribute('height', 24);
+        }
+
+        heightSlider.addEventListener('input', updateParameters);
+        widthSlider.addEventListener('input', updateParameters);
+        extensionSlider.addEventListener('input', updateParameters);
+        groundYSlider.addEventListener('input', () => groundYVal.textContent = groundYSlider.value + ' mm');
+        gravitySlider.addEventListener('input', () => gravityVal.textContent = parseFloat(gravitySlider.value).toFixed(1));
+        speedSlider.addEventListener('input', () => speedVal.textContent = parseFloat(speedSlider.value).toFixed(1) + 'x');
+
+        gravityToggleBtn.addEventListener('click', () => {
+            isGravityEnabled = !isGravityEnabled;
+            gravityToggleBtn.textContent = isGravityEnabled ? '開啟' : '關閉';
+            gravityToggleBtn.style.color = isGravityEnabled ? 'var(--accent-green)' : 'var(--text-muted)';
+            gravityToggleBtn.style.borderColor = isGravityEnabled ? 'var(--accent-green)' : 'var(--border)';
+        });
+
+        angleSlider.addEventListener('input', (e) => {
+            isPlaying = false;
+            updatePlayButtonUI();
+            let deg = parseFloat(e.target.value);
+            angle = -deg * Math.PI / 180;
+            angleVal.textContent = Math.round(deg) + '°';
+        });
+
+        playPauseBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            updatePlayButtonUI();
+        });
+
+        function updatePlayButtonUI() {
+            playPauseBtn.textContent = isPlaying ? '暫停模擬' : '播放模擬';
+            playPauseBtn.classList.toggle('paused', !isPlaying);
+            if (!isJammedGlobal) {
+                statusText.textContent = isPlaying ? '系統運作中' : '系統已暫停';
+                statusText.style.color = isPlaying ? 'var(--accent-green)' : 'var(--text-muted)';
+            }
+        }
+
+        resetBtn.addEventListener('click', () => {
+            angle = -190 * Math.PI / 180;
+            angleSlider.value = 190;
+            angleVal.textContent = '190°';
+            groundX = 0;
+            isJammedGlobal = false;
+            statusDot.classList.remove('jammed');
+            updatePlayButtonUI();
+        });
+
+        function updateGround() {
+            worldGroup.setAttribute('transform', `translate(${groundX}, 0)`);
+            const pegSpacing = 29 * scale;
+            const Cy = baseY + 13 * scale - parseFloat(groundYSlider.value) * scale;
+
+            const minVisibleX = -groundX - 100;
+            const maxVisibleX = 800 - groundX + 100;
+            const startIdx = Math.floor(minVisibleX / pegSpacing);
+            const endIdx = Math.ceil(maxVisibleX / pegSpacing);
+
+            let html = '';
+            for (let i = startIdx; i <= endIdx; i++) {
+                html += `<circle cx="${i * pegSpacing}" cy="${Cy}" r="${1 * scale}" fill="navy" stroke="navy" stroke-width="1" />`;
+            }
+            bottomHolesGroup.innerHTML = html;
+        }
+
+        let isJammedGlobal = false;
+
+        function animate() {
+            if (isGravityEnabled) {
+                groundX -= parseFloat(gravitySlider.value) || 0;
+            }
+
+            if (isPlaying) {
+                angle -= baseSpeed * (parseFloat(speedSlider.value) || 1.0);
+                let deg = (-angle * 180 / Math.PI) % 360;
+                if (deg < 0) deg += 360;
+                angleSlider.value = deg;
+                angleVal.textContent = Math.round(deg) + '°';
+            }
+
+            const calcLeg = (a) => {
+                const cx = redPivotX + crankLength * Math.cos(a);
+                const cy = redPivotY + crankLength * Math.sin(a);
+                const dx = cx - orangePivotX, dy = cy - orangePivotY;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                const ex = cx + (dx / d) * parseFloat(extensionSlider.value) * scale;
+                const ey = cy + (dy / d) * parseFloat(extensionSlider.value) * scale;
+                return { cx, cy, ex, ey };
+            };
+
+            const l1 = calcLeg(angle), l2 = calcLeg(angle + Math.PI);
+
+            redCrank.setAttribute('x1', redPivotX); redCrank.setAttribute('y1', redPivotY);
+            redCrank.setAttribute('x2', l1.cx); redCrank.setAttribute('y2', l1.cy);
+            orangeLever.setAttribute('x1', orangePivotX); orangeLever.setAttribute('y1', orangePivotY);
+            orangeLever.setAttribute('x2', l1.ex); orangeLever.setAttribute('y2', l1.ey);
+            pivotMoving.setAttribute('cx', l1.cx); pivotMoving.setAttribute('cy', l1.cy);
+
+            redCrank2.setAttribute('x1', redPivotX); redCrank2.setAttribute('y1', redPivotY);
+            redCrank2.setAttribute('x2', l2.cx); redCrank2.setAttribute('y2', l2.cy);
+            orangeLever2.setAttribute('x1', orangePivotX); orangeLever2.setAttribute('y1', orangePivotY);
+            orangeLever2.setAttribute('x2', l2.ex); orangeLever2.setAttribute('y2', l2.ey);
+            pivotMoving2.setAttribute('cx', l2.cx); pivotMoving2.setAttribute('cy', l2.cy);
+
+            // 精確碰撞半徑：圓柱半徑 (1mm) + 搖桿半寬 (1.5mm) = 2.5mm
+            const Reff = 2.45 * scale; // 稍微縮減以更貼合視覺邊緣
+            const pegSpacing = 29 * scale;
+            const Cy = baseY + 13 * scale - parseFloat(groundYSlider.value) * scale;
+            let pushL = 0, pushR = 0;
+
+            [l1, l2].forEach(leg => {
+                const lx = leg.ex - orangePivotX, ly = leg.ey - orangePivotY;
+                const len = Math.sqrt(lx * lx + ly * ly);
+                const cIdx = Math.round((leg.ex - groundX) / pegSpacing);
+                for (let i = cIdx - 1; i <= cIdx + 1; i++) {
+                    const cxScreen = i * pegSpacing + groundX;
+                    const dxC = cxScreen - orangePivotX, dyC = Cy - orangePivotY;
+                    let t = (dxC * lx + dyC * ly) / (len * len);
+                    t = Math.max(0, Math.min(1, t));
+                    const clX = orangePivotX + t * lx, clY = orangePivotY + t * ly;
+                    const d2 = (cxScreen - clX) ** 2 + (Cy - clY) ** 2;
+                    if (d2 < Reff * Reff) {
+                        if (t < 1) {
+                            if (ly > 0) {
+                                // 數值修正：使用更穩定的偏移計算
+                                const req = orangePivotX + (lx / ly) * (Cy - orangePivotY) + (cxScreen <= clX ? -1 : 1) * Reff * (len / ly);
+                                if (cxScreen <= clX) pushL = Math.max(pushL, cxScreen - req);
+                                else pushR = Math.max(pushR, req - cxScreen);
+                            }
+                        } else {
+                            const dr = Math.sqrt(Math.max(0, Reff * Reff - (Cy - leg.ey) ** 2));
+                            if (cxScreen <= leg.ex) pushL = Math.max(pushL, cxScreen - (leg.ex - dr));
+                            else pushR = Math.max(pushR, (leg.ex + dr) - cxScreen);
+                        }
+                    }
+                }
+            });
+
+            isJammedGlobal = (pushL > 0.1 && pushR > 0.1) || pushL > 30 || pushR > 30;
+            const svgEl = document.getElementById('mechanism-svg');
+
+            if (isJammedGlobal) {
+                statusDot.classList.add('jammed');
+                statusText.textContent = '機構卡死警告';
+                statusText.style.color = 'var(--accent-red)';
+                svgEl.style.filter = "drop-shadow(0 0 30px rgba(239, 68, 68, 0.8))";
+                if (isPlaying) {
+                    isPlaying = false;
+                    updatePlayButtonUI();
+                }
+            } else {
+                statusDot.classList.remove('jammed');
+                svgEl.style.filter = "none";
+                if (pushL > 0) groundX -= pushL;
+                else if (pushR > 0) groundX += pushR;
+            }
+
+            updateGround();
+            requestAnimationFrame(animate);
+        }
+
+        updateParameters();
+        animate();
+    </script>
+</body>
+
+</html>
