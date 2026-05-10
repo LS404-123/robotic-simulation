@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>機器人模擬系統 | Robotic Simulation System</title>
+    <meta name="description" content="探索先進的二足與多足機器人運動學模擬，包含爬橫杆與爬梯機構。">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <header>
+        <h1>機器人模擬系統</h1>
+        <p class="subtitle">Robotic Kinematics Simulation Laboratory</p>
+    </header>
+
+    <main class="grid">
+        <a href="爬橫杆/mechanism.html" class="card" id="sim-monkey-bars">
+            <div class="card-icon">🐒</div>
+            <div class="tag">Simulation v1.2</div>
+            <h2>爬橫杆機構</h2>
+            <p>模擬機器人在橫杆上的懸掛與移動軌跡，包含四連桿機構的動態座標計算與視覺化。</p>
+            <div class="arrow">→</div>
+        </a>
+
+        <a href="爬梯/mechanism.html" class="card" id="sim-ladder">
+            <div class="card-icon">🪜</div>
+            <div class="tag">Simulation v1.0</div>
+            <h2>爬梯機構</h2>
+            <p>探索機器人垂直攀爬的步態與重心平衡，專為複雜地形與階梯環境設計的運動模擬。</p>
+            <div class="arrow">→</div>
+        </a>
+    </main>
+
+    <footer>
+        &copy; 2026 ROBOTIC SIMULATION LAB | POWERED BY ANTIGRAVITY
+    </footer>
+
+    <script>
+        // Subtle parallax effect on mouse move
+        document.addEventListener('mousemove', (e) => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            
+            const blobs = document.querySelectorAll('.blob');
+            blobs.forEach((blob, index) => {
+                const speed = (index + 1) * 20;
+                blob.style.transform = `translate(${x * speed}px, ${y * speed}px)`;
+            });
+        });
+    </script>
+</body>
+</html>

@@ -342,6 +342,10 @@
                 雙足步行 <span>模擬系統</span>
             </div>
             <div class="status-indicators">
+                <a href="../index.html" style="text-decoration: none; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.borderColor='var(--primary)'; this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--text-muted)'">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                    回首頁
+                </a>
                 <div class="status-item">
                     <div id="status-dot" class="dot"></div>
                     <span id="status-text">系統運作中</span>
@@ -404,17 +408,17 @@
                 <div class="control-item">
                     <div class="control-label-row">
                         <label class="control-label">手動角度控制</label>
-                        <span class="badge" id="angle-val">190°</span>
+                        <span class="badge" id="angle-val">187°</span>
                     </div>
-                    <input type="range" id="angle-slider" min="0" max="360" value="190" step="1">
+                    <input type="range" id="angle-slider" min="0" max="360" value="187" step="1">
                 </div>
 
                 <div class="control-item">
                     <div class="control-label-row">
                         <label class="control-label">曲柄迴轉速</label>
-                        <span class="badge" id="speed-val">1.0x</span>
+                        <span class="badge" id="speed-val">5.0x</span>
                     </div>
-                    <input type="range" id="speed-slider" min="0.1" max="5" value="1" step="0.1">
+                    <input type="range" id="speed-slider" min="0.1" max="5" value="5" step="0.1">
                 </div>
 
                 <div class="action-row">
@@ -467,9 +471,9 @@
                 <div class="control-item">
                     <div class="control-label-row">
                         <label class="control-label">地面相對高度</label>
-                        <span class="badge" id="ground-y-val">-3 mm</span>
+                        <span class="badge" id="ground-y-val">-1 mm</span>
                     </div>
-                    <input type="range" id="ground-y-slider" min="-30" max="30" value="-3" step="1">
+                    <input type="range" id="ground-y-slider" min="-30" max="30" value="-1" step="1">
                 </div>
 
                 <div class="control-item">
@@ -519,6 +523,9 @@
         const statusText = document.getElementById('status-text');
 
         let groundX = 0;
+        let groundVelocity = 0; // 新增：地面（梯子）速度
+        const inertiaDamping = 0.96; // 新增：慣性阻尼
+        const impulseFactor = 0.4; // 新增：衝量係數
 
         const heightSlider = document.getElementById('height-slider');
         const widthSlider = document.getElementById('width-slider');
@@ -553,7 +560,7 @@
         const crankButtons = document.querySelectorAll('#crank-buttons .crank-btn');
         let currentCrankValue = 15.5;
         let crankLength = 15.5 * scale;
-        let angle = -190 * Math.PI / 180;
+        let angle = -187 * Math.PI / 180;
         const baseSpeed = 0.025;
         let isGravityEnabled = true;
 
@@ -676,10 +683,15 @@
         }
 
         resetBtn.addEventListener('click', () => {
-            angle = -190 * Math.PI / 180;
-            angleSlider.value = 190;
-            angleVal.textContent = '190°';
+            angle = -187 * Math.PI / 180;
+            angleSlider.value = 187;
+            angleVal.textContent = '187°';
+            speedSlider.value = 5;
+            speedVal.textContent = '5.0x';
+            groundYSlider.value = -1;
+            groundYVal.textContent = '-1 mm';
             groundX = 0;
+            groundVelocity = 0;
             isJammedGlobal = false;
             statusDot.classList.remove('jammed');
             updatePlayButtonUI();
@@ -705,8 +717,13 @@
         let isJammedGlobal = false;
 
         function animate() {
+            // 1. 基礎物理應用：速度與阻尼
+            groundX += groundVelocity;
+            groundVelocity *= inertiaDamping;
+
+            // 2. 重力影響（下滑加速度）
             if (isGravityEnabled) {
-                groundX -= parseFloat(gravitySlider.value) || 0;
+                groundVelocity -= (parseFloat(gravitySlider.value) || 0) * 0.05;
             }
 
             if (isPlaying) {
@@ -783,6 +800,7 @@
                 statusText.textContent = '機構卡死警告';
                 statusText.style.color = 'var(--accent-red)';
                 svgEl.style.filter = "drop-shadow(0 0 30px rgba(239, 68, 68, 0.8))";
+                groundVelocity = 0; // 卡死時速度歸零
                 if (isPlaying) {
                     isPlaying = false;
                     updatePlayButtonUI();
@@ -790,8 +808,15 @@
             } else {
                 statusDot.classList.remove('jammed');
                 svgEl.style.filter = "none";
-                if (pushL > 0) groundX -= pushL;
-                else if (pushR > 0) groundX += pushR;
+                
+                // 3. 碰撞推動力：將位置修正轉化為動量
+                if (pushL > 0) {
+                    groundX -= pushL;
+                    groundVelocity -= pushL * impulseFactor;
+                } else if (pushR > 0) {
+                    groundX += pushR;
+                    groundVelocity += pushR * impulseFactor;
+                }
             }
 
             updateGround();
