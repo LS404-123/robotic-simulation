@@ -422,7 +422,7 @@
                 </div>
 
                 <div class="action-row">
-                    <button id="play-pause-btn" class="btn-primary">暫停模擬</button>
+                    <button id="play-pause-btn" class="btn-primary">播放模擬</button>
                     <button id="reset-btn" class="btn-secondary">重置系統</button>
                 </div>
             </div>
@@ -483,9 +483,25 @@
                             <button id="gravity-toggle-btn" class="badge"
                                 style="cursor:pointer; border:1px solid var(--accent-green); color:var(--accent-green); background:transparent;">開啟</button>
                         </div>
-                        <span class="badge" id="gravity-val">1.0</span>
+                        <span class="badge" id="gravity-val">4.0</span>
                     </div>
-                    <input type="range" id="gravity-slider" min="0" max="5" value="1.0" step="0.1">
+                    <input type="range" id="gravity-slider" min="0" max="5" value="4" step="0.1">
+                </div>
+            </div>
+
+            <div class="card" style="border-top: 2px solid var(--accent-orange);">
+                <div class="card-header">連桿數據分析 (Analysis)</div>
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">中間孔位當前距離</label>
+                        <span class="badge" id="current-d-val">24.82 mm</span>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">理論最短 / 最長距離</label>
+                        <span class="badge" id="d-range-val">9.32 / 40.32 mm</span>
+                    </div>
                 </div>
             </div>
         </aside>
@@ -545,8 +561,10 @@
         const angleVal = document.getElementById('angle-val');
         const gravityVal = document.getElementById('gravity-val');
         const speedVal = document.getElementById('speed-val');
+        const currentDVal = document.getElementById('current-d-val');
+        const dRangeVal = document.getElementById('d-range-val');
 
-        let isPlaying = true;
+        let isPlaying = false;
         const scale = 6;
         const baseY = 400;
         const leftX = 350;
@@ -644,6 +662,12 @@
             dimText.setAttribute('y', dimY);
             dimBg.setAttribute('x', midX - 35); dimBg.setAttribute('y', dimY - 12);
             dimBg.setAttribute('width', 70); dimBg.setAttribute('height', 24);
+
+            // 更新理論範圍數據
+            const distOR = Math.sqrt((redPivotX - orangePivotX)**2 + (redPivotY - orangePivotY)**2) / scale;
+            const minD = Math.abs(distOR - currentCrankValue);
+            const maxD = distOR + currentCrankValue;
+            dRangeVal.textContent = `${minD.toFixed(2)} / ${maxD.toFixed(2)} mm`;
         }
 
         heightSlider.addEventListener('input', updateParameters);
@@ -690,8 +714,11 @@
             speedVal.textContent = '5.0x';
             groundYSlider.value = -1;
             groundYVal.textContent = '-1 mm';
+            gravitySlider.value = 4;
+            gravityVal.textContent = '4.0';
             groundX = 0;
             groundVelocity = 0;
+            isPlaying = false;
             isJammedGlobal = false;
             statusDot.classList.remove('jammed');
             updatePlayButtonUI();
@@ -745,6 +772,11 @@
             };
 
             const l1 = calcLeg(angle), l2 = calcLeg(angle + Math.PI);
+            
+            // 更新實時距離數據 (以第一隻腳為主)
+            const dx = l1.cx - orangePivotX, dy = l1.cy - orangePivotY;
+            const currentD = Math.sqrt(dx * dx + dy * dy) / scale;
+            currentDVal.textContent = `${currentD.toFixed(2)} mm`;
 
             redCrank.setAttribute('x1', redPivotX); redCrank.setAttribute('y1', redPivotY);
             redCrank.setAttribute('x2', l1.cx); redCrank.setAttribute('y2', l1.cy);
