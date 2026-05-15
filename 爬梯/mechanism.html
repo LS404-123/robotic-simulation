@@ -573,9 +573,17 @@
                             <button id="gravity-toggle-btn" class="badge"
                                 style="cursor:pointer; border:1px solid var(--accent-green); color:var(--accent-green); background:transparent;">開啟</button>
                         </div>
-                        <span class="badge" id="gravity-val">4.0</span>
+                        <span class="badge" id="gravity-val">9.81</span>
                     </div>
-                    <input type="range" id="gravity-slider" min="0" max="5" value="4" step="0.1">
+                    <input type="range" id="gravity-slider" min="0" max="20" value="9.81" step="0.01">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">運動慣性阻尼</label>
+                        <span class="badge" id="damping-val">0.85</span>
+                    </div>
+                    <input type="range" id="damping-slider" min="0.5" max="0.99" value="0.85" step="0.01">
                 </div>
             </div>
         </aside>
@@ -613,9 +621,13 @@
         const statusText = document.getElementById('status-text');
 
         let groundX = 0;
-        let groundVelocity = 0; // 新增：地面（梯子）速度
-        const inertiaDamping = 0.96; // 新增：慣性阻尼
-        const impulseFactor = 0.4; // 新增：衝量係數
+        let groundVelocity = 0; 
+        const impulseFactor = 0.4; 
+
+        const dampingSlider = document.getElementById('damping-slider');
+        const dampingVal = document.getElementById('damping-val');
+        
+        let currentDamping = 0.85;
 
         const heightSlider = document.getElementById('height-slider');
         const widthSlider = document.getElementById('width-slider');
@@ -763,6 +775,10 @@
         groundYSlider.addEventListener('input', () => groundYVal.textContent = groundYSlider.value + ' mm');
         gravitySlider.addEventListener('input', () => gravityVal.textContent = parseFloat(gravitySlider.value).toFixed(1));
         speedSlider.addEventListener('input', () => speedVal.textContent = parseFloat(speedSlider.value).toFixed(1) + 'x');
+        dampingSlider.addEventListener('input', () => {
+            currentDamping = parseFloat(dampingSlider.value);
+            dampingVal.textContent = currentDamping.toFixed(2);
+        });
 
         gravityToggleBtn.addEventListener('click', () => {
             isGravityEnabled = !isGravityEnabled;
@@ -801,8 +817,11 @@
             speedVal.textContent = '5.0x';
             groundYSlider.value = -1;
             groundYVal.textContent = '-1 mm';
-            gravitySlider.value = 4;
-            gravityVal.textContent = '4.0';
+            gravitySlider.value = 9.81;
+            gravityVal.textContent = '9.81';
+            dampingSlider.value = 0.85;
+            dampingVal.textContent = '0.85';
+            currentDamping = 0.85;
             groundX = 0;
             groundVelocity = 0;
             isPlaying = false;
@@ -845,11 +864,20 @@
         function animate() {
             // 1. 基礎物理應用：速度與阻尼
             groundX += groundVelocity;
-            groundVelocity *= inertiaDamping;
+            
+            // 動態阻尼：如果正在發生碰撞或推擠，額外增加摩擦 (降低阻尼)
+            let activeDamping = currentDamping;
+            if (isJammedGlobal) activeDamping *= 0.5; // 卡死時大幅增加摩擦
+            
+            groundVelocity *= activeDamping;
 
-            // 2. 重力影響（下滑加速度）
+            // 2. 重力影響（以 g = 9.81 m/s² 為基準）
             if (isGravityEnabled) {
-                groundVelocity -= (parseFloat(gravitySlider.value) || 0) * 0.05;
+                // 物理換算係數：9.81 m/s² 對應到畫面上的加速度
+                // 1mm = 6px, 1s = 60 frames -> 1 m/s² = 1000 * 6 / 3600 = 1.667 px/frame²
+                const gValue = parseFloat(gravitySlider.value) || 0;
+                const gravityAccPx = gValue * (6000 / 3600); // 簡化為 1.667
+                groundVelocity -= gravityAccPx * 0.02; // 加入 0.02 的尺度修正，避免數值爆炸但保持比例正確
             }
 
             if (isPlaying) {
