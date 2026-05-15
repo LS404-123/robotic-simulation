@@ -332,6 +332,43 @@
             stroke: #000;
             stroke-width: 2;
         }
+
+        /* HUD Styles */
+        .simulation-hud {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .hud-card {
+            background: rgba(13, 17, 23, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            width: 240px;
+            box-shadow: var(--shadow-xl);
+            pointer-events: auto;
+        }
+
+        .hud-card .card-header {
+            font-size: 0.7rem;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+        }
+
+        .hud-card .control-item {
+            gap: 6px;
+        }
+
+        .hud-card .badge {
+            font-size: 0.7rem;
+            padding: 1px 6px;
+        }
     </style>
 </head>
 
@@ -399,6 +436,59 @@
                     </g>
                 </g>
             </svg>
+
+            <!-- Floating HUD -->
+            <div class="simulation-hud">
+                <!-- Orange Analysis Box -->
+                <div class="hud-card" style="border-left: 3px solid var(--accent-orange);">
+                    <div class="card-header">機構連桿數據 (Analysis)</div>
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-label" style="font-size: 0.75rem;">當前距離</span>
+                            <span class="badge" id="current-d-val">--</span>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-label" style="font-size: 0.75rem;">理論範圍</span>
+                            <span class="badge" id="d-range-val">--</span>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-label" style="font-size: 0.75rem;">機器人時速</span>
+                            <span class="badge" id="robot-speed-val">0.00 mm/s</span>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <div class="control-label-row">
+                            <span class="control-label" style="font-size: 0.75rem;">累計位移</span>
+                            <span class="badge" id="robot-dist-val">0.0 mm</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Blue Mission Box -->
+                <div class="hud-card" style="border-left: 3px solid var(--primary);">
+                    <div class="card-header">移動任務 (Mission)</div>
+                    <div class="control-item" style="margin-bottom: 4px;">
+                        <div class="control-label-row">
+                            <span class="control-label" style="font-size: 0.75rem;">目標 / 計時</span>
+                            <span class="badge" id="mission-timer">0.00 s</span>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span id="mission-status" style="font-size: 0.65rem; color: var(--text-muted);">等待開始...</span>
+                            <span style="font-size: 0.65rem; color: var(--primary);">1530mm</span>
+                        </div>
+                        <div style="height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                            <div id="mission-progress-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <button id="start-mission-btn" class="crank-btn" style="margin-top: 8px; width: 100%; padding: 4px; font-size: 0.7rem; border-color: var(--primary); color: var(--primary);">開始任務</button>
+                </div>
+            </div>
         </div>
 
         <aside class="sidebar">
@@ -418,7 +508,7 @@
                         <label class="control-label">曲柄迴轉速</label>
                         <span class="badge" id="speed-val">5.0x</span>
                     </div>
-                    <input type="range" id="speed-slider" min="0.1" max="5" value="5" step="0.1">
+                    <input type="range" id="speed-slider" min="0.1" max="10" value="5" step="0.1">
                 </div>
 
                 <div class="action-row">
@@ -488,22 +578,6 @@
                     <input type="range" id="gravity-slider" min="0" max="5" value="4" step="0.1">
                 </div>
             </div>
-
-            <div class="card" style="border-top: 2px solid var(--accent-orange);">
-                <div class="card-header">連桿數據分析 (Analysis)</div>
-                <div class="control-item">
-                    <div class="control-label-row">
-                        <label class="control-label">中間孔位當前距離</label>
-                        <span class="badge" id="current-d-val">24.82 mm</span>
-                    </div>
-                </div>
-                <div class="control-item">
-                    <div class="control-label-row">
-                        <label class="control-label">理論最短 / 最長距離</label>
-                        <span class="badge" id="d-range-val">9.32 / 40.32 mm</span>
-                    </div>
-                </div>
-            </div>
         </aside>
     </div>
 
@@ -563,6 +637,19 @@
         const speedVal = document.getElementById('speed-val');
         const currentDVal = document.getElementById('current-d-val');
         const dRangeVal = document.getElementById('d-range-val');
+        const robotSpeedVal = document.getElementById('robot-speed-val');
+        const robotDistVal = document.getElementById('robot-dist-val');
+
+        const missionTimer = document.getElementById('mission-timer');
+        const missionStatus = document.getElementById('mission-status');
+        const missionProgressBar = document.getElementById('mission-progress-bar');
+        const startMissionBtn = document.getElementById('start-mission-btn');
+
+        let missionActive = false;
+        let missionStartTime = 0;
+        let missionElapsed = 0;
+        let missionStartPos = 0;
+        let missionTarget = 1530; // 固定目標為 1530mm，或可視需求調整為動態輸入
 
         let isPlaying = false;
         const scale = 6;
@@ -724,6 +811,18 @@
             updatePlayButtonUI();
         });
 
+        startMissionBtn.addEventListener('click', () => {
+            missionActive = true;
+            missionStartTime = performance.now();
+            missionStartPos = Math.abs(groundX) / scale;
+            missionTarget = 1530; 
+            missionStatus.textContent = "任務執行中...";
+            missionStatus.style.color = "var(--primary)";
+            missionProgressBar.style.background = "var(--primary)";
+            isPlaying = true;
+            updatePlayButtonUI();
+        });
+
         function updateGround() {
             worldGroup.setAttribute('transform', `translate(${groundX}, 0)`);
             const pegSpacing = 29 * scale;
@@ -848,6 +947,36 @@
                 } else if (pushR > 0) {
                     groundX += pushR;
                     groundVelocity += pushR * impulseFactor;
+                }
+            }
+
+            // 更新機器人移動數據顯示
+            // 速度估計 (pixels/frame * 60fps / scale) -> mm/s
+            const speedMmPerS = Math.abs(groundVelocity) * 60 / scale;
+            robotSpeedVal.textContent = `${speedMmPerS.toFixed(2)} mm/s`;
+            // 累計距離 (絕對位移)
+            const currentTotalDist = Math.abs(groundX) / scale;
+            robotDistVal.textContent = `${currentTotalDist.toFixed(1)} mm`;
+
+            // 任務邏輯
+            if (missionActive) {
+                const moved = currentTotalDist - missionStartPos;
+                const progress = Math.min(100, (moved / missionTarget) * 100);
+                missionProgressBar.style.width = progress + "%";
+                
+                missionElapsed = (performance.now() - missionStartTime) / 1000;
+                missionTimer.textContent = missionElapsed.toFixed(2) + " s";
+
+                if (moved >= missionTarget) {
+                    missionActive = false;
+                    isPlaying = false;
+                    updatePlayButtonUI();
+                    missionStatus.textContent = "任務完成！";
+                    missionStatus.style.color = "var(--accent-green)";
+                    missionProgressBar.style.background = "var(--accent-green)";
+                    
+                    // 自動彈出結果或標示
+                    console.log(`Mission Complete: 1530mm moved in ${missionElapsed.toFixed(2)}s`);
                 }
             }
 
