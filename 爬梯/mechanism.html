@@ -463,7 +463,12 @@
                     <div class="control-item">
                         <div class="control-label-row">
                             <span class="control-label" style="font-size: 0.75rem;">累計位移</span>
-                            <span class="badge" id="robot-dist-val">0.0 mm</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span class="badge" id="robot-dist-val">0.0 mm</span>
+                                <button id="clear-dist-btn" title="清除位移" style="background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; padding: 2px; transition: color 0.2s;" onmouseover="this.style.color='var(--accent-red)'" onmouseout="this.style.color='var(--text-muted)'">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -509,6 +514,14 @@
                         <span class="badge" id="speed-val">5.0x</span>
                     </div>
                     <input type="range" id="speed-slider" min="0.1" max="10" value="5" step="0.1">
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label-row">
+                        <label class="control-label">模擬速率 (Time Scale)</label>
+                        <span class="badge" id="timescale-val">1.0x</span>
+                    </div>
+                    <input type="range" id="timescale-slider" min="0.1" max="2.0" value="1.0" step="0.1">
                 </div>
 
                 <div class="action-row">
@@ -620,6 +633,11 @@
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
 
+        const timescaleSlider = document.getElementById('timescale-slider');
+        const timescaleVal = document.getElementById('timescale-val');
+        const clearDistBtn = document.getElementById('clear-dist-btn');
+        
+        let timeScale = 1.0;
         let groundX = 0;
         let groundVelocity = 0; 
         const impulseFactor = 0.4; 
@@ -780,6 +798,20 @@
             dampingVal.textContent = currentDamping.toFixed(2);
         });
 
+        timescaleSlider.addEventListener('input', () => {
+            timeScale = parseFloat(timescaleSlider.value);
+            timescaleVal.textContent = timeScale.toFixed(1) + 'x';
+        });
+
+        clearDistBtn.addEventListener('click', () => {
+            groundX = 0;
+            groundVelocity = 0;
+            missionStartPos = 0;
+            if (missionActive) {
+                missionStartTime = performance.now(); // 重置任務計時
+            }
+        });
+
         gravityToggleBtn.addEventListener('click', () => {
             isGravityEnabled = !isGravityEnabled;
             gravityToggleBtn.textContent = isGravityEnabled ? '開啟' : '關閉';
@@ -819,6 +851,9 @@
             groundYVal.textContent = '-1 mm';
             gravitySlider.value = 9.81;
             gravityVal.textContent = '9.81';
+            timescaleSlider.value = 1.0;
+            timescaleVal.textContent = '1.0x';
+            timeScale = 1.0;
             dampingSlider.value = 0.85;
             dampingVal.textContent = '0.85';
             currentDamping = 0.85;
@@ -860,32 +895,31 @@
         }
 
         let isJammedGlobal = false;
+        let accumulator = 0;
+        const fixedDt = 1 / 240; // 固定物理步長，提供高精度模擬
 
-        function animate() {
-            // 1. 基礎物理應用：速度與阻尼
-            groundX += groundVelocity;
+        function physicsUpdate(dt) {
+            // 1. 基礎物理應用
+            groundX += groundVelocity * dt * 60; // 乘以 60 是為了維持原本以 frame 為單位的數值比例
             
-            // 動態阻尼：如果正在發生碰撞或推擠，額外增加摩擦 (降低阻尼)
-            let activeDamping = currentDamping;
-            if (isJammedGlobal) activeDamping *= 0.5; // 卡死時大幅增加摩擦
+            // 阻尼計算：使用指數形式確保 dt 變動時阻尼感一致
+            const stepDamping = Math.pow(currentDamping, dt * 60);
+            let activeDamping = stepDamping;
+            if (isJammedGlobal) activeDamping *= Math.pow(0.5, dt * 60); 
             
             groundVelocity *= activeDamping;
 
-            // 2. 重力影響（以 g = 9.81 m/s² 為基準）
+            // 2. 重力影響
             if (isGravityEnabled) {
-                // 物理換算係數：9.81 m/s² 對應到畫面上的加速度
-                // 1mm = 6px, 1s = 60 frames -> 1 m/s² = 1000 * 6 / 3600 = 1.667 px/frame²
                 const gValue = parseFloat(gravitySlider.value) || 0;
-                const gravityAccPx = gValue * (6000 / 3600); // 簡化為 1.667
-                groundVelocity -= gravityAccPx * 0.02; // 加入 0.02 的尺度修正，避免數值爆炸但保持比例正確
+                const gravityAccPx = gValue * (6000 / 3600); 
+                groundVelocity -= gravityAccPx * 0.02 * dt * 60; 
             }
 
+            // 3. 機構運作更新
             if (isPlaying) {
-                angle -= baseSpeed * (parseFloat(speedSlider.value) || 1.0);
-                let deg = (-angle * 180 / Math.PI) % 360;
-                if (deg < 0) deg += 360;
-                angleSlider.value = deg;
-                angleVal.textContent = Math.round(deg) + '°';
+                const rotationSpeed = baseSpeed * (parseFloat(speedSlider.value) || 1.0) * 60;
+                angle -= rotationSpeed * dt;
             }
 
             const calcLeg = (a) => {
@@ -900,7 +934,7 @@
 
             const l1 = calcLeg(angle), l2 = calcLeg(angle + Math.PI);
             
-            // 更新實時距離數據 (以第一隻腳為主)
+            // 更新位置與實時數據
             const dx = l1.cx - orangePivotX, dy = l1.cy - orangePivotY;
             const currentD = Math.sqrt(dx * dx + dy * dy) / scale;
             currentDVal.textContent = `${currentD.toFixed(2)} mm`;
@@ -917,8 +951,8 @@
             orangeLever2.setAttribute('x2', l2.ex); orangeLever2.setAttribute('y2', l2.ey);
             pivotMoving2.setAttribute('cx', l2.cx); pivotMoving2.setAttribute('cy', l2.cy);
 
-            // 精確碰撞半徑：圓柱半徑 (1mm) + 搖桿半寬 (1.5mm) = 2.5mm
-            const Reff = 2.45 * scale; // 稍微縮減以更貼合視覺邊緣
+            // 4. 碰撞偵測 (與原本邏輯相同，但使用固定 dt)
+            const Reff = 2.45 * scale;
             const pegSpacing = 29 * scale;
             const Cy = baseY + 13 * scale - parseFloat(groundYSlider.value) * scale;
             let pushL = 0, pushR = 0;
@@ -937,7 +971,6 @@
                     if (d2 < Reff * Reff) {
                         if (t < 1) {
                             if (ly > 0) {
-                                // 數值修正：使用更穩定的偏移計算
                                 const req = orangePivotX + (lx / ly) * (Cy - orangePivotY) + (cxScreen <= clX ? -1 : 1) * Reff * (len / ly);
                                 if (cxScreen <= clX) pushL = Math.max(pushL, cxScreen - req);
                                 else pushR = Math.max(pushR, req - cxScreen);
@@ -959,7 +992,7 @@
                 statusText.textContent = '機構卡死警告';
                 statusText.style.color = 'var(--accent-red)';
                 svgEl.style.filter = "drop-shadow(0 0 30px rgba(239, 68, 68, 0.8))";
-                groundVelocity = 0; // 卡死時速度歸零
+                groundVelocity = 0;
                 if (isPlaying) {
                     isPlaying = false;
                     updatePlayButtonUI();
@@ -967,8 +1000,6 @@
             } else {
                 statusDot.classList.remove('jammed');
                 svgEl.style.filter = "none";
-                
-                // 3. 碰撞推動力：將位置修正轉化為動量
                 if (pushL > 0) {
                     groundX -= pushL;
                     groundVelocity -= pushL * impulseFactor;
@@ -978,23 +1009,18 @@
                 }
             }
 
-            // 更新機器人移動數據顯示
-            // 速度估計 (pixels/frame * 60fps / scale) -> mm/s
+            // 更新顯示數據與任務邏輯
             const speedMmPerS = Math.abs(groundVelocity) * 60 / scale;
             robotSpeedVal.textContent = `${speedMmPerS.toFixed(2)} mm/s`;
-            // 累計距離 (絕對位移)
             const currentTotalDist = Math.abs(groundX) / scale;
             robotDistVal.textContent = `${currentTotalDist.toFixed(1)} mm`;
 
-            // 任務邏輯
             if (missionActive) {
                 const moved = currentTotalDist - missionStartPos;
                 const progress = Math.min(100, (moved / missionTarget) * 100);
                 missionProgressBar.style.width = progress + "%";
-                
                 missionElapsed = (performance.now() - missionStartTime) / 1000;
                 missionTimer.textContent = missionElapsed.toFixed(2) + " s";
-
                 if (moved >= missionTarget) {
                     missionActive = false;
                     isPlaying = false;
@@ -1002,11 +1028,32 @@
                     missionStatus.textContent = "任務完成！";
                     missionStatus.style.color = "var(--accent-green)";
                     missionProgressBar.style.background = "var(--accent-green)";
-                    
-                    // 自動彈出結果或標示
-                    console.log(`Mission Complete: 1530mm moved in ${missionElapsed.toFixed(2)}s`);
                 }
             }
+        }
+
+        let lastTimestamp = 0;
+        function animate(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const frameTime = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+
+            // 累積時間，並根據時間速率進行子步迭代
+            accumulator += frameTime * timeScale;
+            
+            // 限制單幀最大步數，防止因為背景標籤切換導致的計算爆炸 (Spiral of death)
+            let steps = 0;
+            while (accumulator >= fixedDt && steps < 20) {
+                physicsUpdate(fixedDt);
+                accumulator -= fixedDt;
+                steps++;
+            }
+
+            // 更新角度滑動條顯示 (取樣當前角度)
+            let deg = (-angle * 180 / Math.PI) % 360;
+            if (deg < 0) deg += 360;
+            angleSlider.value = deg;
+            angleVal.textContent = Math.round(deg) + '°';
 
             updateGround();
             requestAnimationFrame(animate);
